@@ -12,7 +12,7 @@ import { KAFKA_TOPICS } from "apps/web-service/config/kafka.config";
 export class OrderService {
     constructor(
         @InjectModel(Order.name) private readonly orderModel: Model<Order>,
-        private readonly kafkaServicee: KafkaService,
+        private readonly kafkaService: KafkaService,
         private readonly productSyncService: ProductSyncService
     ) { }
 
@@ -57,7 +57,9 @@ export class OrderService {
             createdAt: savedOrder.createdAt.toISOString(),
             updatedAt: savedOrder.updatedAt.toISOString()
         };
-        await this.kafkaServicee.publish(
+        console.log('KAFKA_TOPICS.ORDER_CREATED value:', KAFKA_TOPICS.ORDER_CREATED);
+        console.log('Publishing to topic:', KAFKA_TOPICS.ORDER_CREATED);
+        await this.kafkaService.publish(
             KAFKA_TOPICS.ORDER_CREATED,
             'order.created',
             savedOrder.orderNumber,
@@ -106,7 +108,7 @@ export class OrderService {
                 })
 
                 // publish Kafka
-                await this.kafkaServicee.publish(
+                await this.kafkaService.publish(
                     KAFKA_TOPICS.INVENTORY_UPDATED,
                     item.sku,
                     'inventory.updated',

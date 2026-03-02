@@ -1,6 +1,6 @@
 import { InjectModel } from "@nestjs/mongoose";
 import { KafkaService } from "../kafka/kafka.service";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Inject, forwardRef } from "@nestjs/common";
 import { Product } from "./schemas/product.schemas";
 import { Model } from "mongoose";
 import { CreateProductDto } from "./dto/create-product.dto";
@@ -14,7 +14,7 @@ export class ProductService {
     private readonly logger = new Logger(ProductService.name)
     constructor(
         @InjectModel(Product.name) private readonly productModel: Model<Product>,
-        private readonly kafkaService: KafkaService,
+        @Inject(forwardRef(() => KafkaService)) private readonly kafkaService: KafkaService,
         private readonly inventoryService: InventoryService
     ) { }
 
@@ -182,6 +182,25 @@ export class ProductService {
         )
 
         return this.toResponse(productDelete)
+    }
+
+    async updateStockQuantity(sku: string, stockQuantity: number): Promise<Product> {
+        const product = await this.productModel.findOne({ sku });
+
+        if (!product) {
+            throw new Error(`Product with SKU ${sku} not found`);
+        }
+
+        product.stockQuantity = stockQuantity;
+        product.isActive = stockQuantity > 0;
+
+        await this.inventoryService.updateInventory(
+            sku,
+            stockQuantity,
+            product.name
+        );
+
+        return await product.save();
     }
 
     private toPayload(product: Product) {

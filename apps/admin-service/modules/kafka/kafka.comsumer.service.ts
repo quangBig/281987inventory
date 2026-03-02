@@ -2,6 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { KAFKA_TOPICS } from "apps/admin-service/config/kafka.config";
 import { Consumer, Kafka } from "kafkajs";
 import { OrderService } from "../order/order.service";
+import { InventoryService } from "../inventory/inventory.service";
+import { ProductService } from "../product/product.service";
 
 @Injectable()
 export class KafkaConsumerService {
@@ -10,7 +12,9 @@ export class KafkaConsumerService {
 
     constructor(
         private readonly kafka: Kafka,
-        private readonly orderService: OrderService
+        private readonly orderService: OrderService,
+        private readonly inventoryService: InventoryService,
+        private readonly productService: ProductService
     ) {
         this.consumer = this.kafka.consumer({ groupId: 'admin-service-group' });
     }
@@ -21,7 +25,8 @@ export class KafkaConsumerService {
 
         await this.consumer.subscribe({
             topics: [
-                KAFKA_TOPICS.ORDER_CREATED
+                KAFKA_TOPICS.ORDER_CREATED, // Revert back to order.created
+                KAFKA_TOPICS.INVENTORY_UPDATED
             ],
         });
 
@@ -47,6 +52,9 @@ export class KafkaConsumerService {
                         case KAFKA_TOPICS.ORDER_CREATED:
                             await this.handleOrderCreated(data);
                             break;
+                        case KAFKA_TOPICS.INVENTORY_UPDATED:
+                            await this.handleInventoryUpdated(data);
+                            break;
                     }
 
                 } catch (error) {
@@ -64,6 +72,34 @@ export class KafkaConsumerService {
             this.logger.log(`Successfully processed order creation: ${orderData.orderNumber}`);
         } catch (error) {
             this.logger.error(`Failed to create order ${orderData.orderNumber}:`, error);
+        }
+    }
+
+    private async handleInventoryUpdated(inventoryData: any) {
+        this.logger.log(`Updating inventory in admin service: ${inventoryData.productSku}`);
+
+        try {
+            // Update inventory in admin service
+            await this.inventoryService.updateInventory(
+                inventoryData.productSku,
+                inventoryData.stockQuantity,
+                inventoryData.productName
+            );
+
+            // Also update product stock quantity
+            try {
+                await this.productService.updateStockQuantity(
+                    inventoryData.productSku,
+                    inventoryData.stockQuantity
+                );
+                this.logger.log(`Product stock updated: ${inventoryData.productSku}, new stock: ${inventoryData.stockQuantity}`);
+            } catch (productError) {
+                this.logger.warn(`Failed to update product stock for ${inventoryData.productSku}: ${productError.message}`);
+            }
+
+            this.logger.log(`Inventory updated: ${inventoryData.productSku}, new stock: ${inventoryData.stockQuantity}`);
+        } catch (error) {
+            this.logger.error(`Failed to update inventory ${inventoryData.productSku}:`, error);
         }
     }
 

@@ -1,11 +1,13 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { Kafka } from "kafkajs";
 import { KafkaService } from "./kafka.service";
 import { KafkaConsumerService } from "./kafka.comsumer.service";
 import { OrderModule } from "../order/order.module";
+import { InventoryModule } from "../inventory/inventory.module";
+import { ProductModule } from "../product/product.module";
 
 @Module({
-    imports: [OrderModule],
+    imports: [OrderModule, InventoryModule, forwardRef(() => ProductModule)],
     providers: [
         {
             provide: Kafka,

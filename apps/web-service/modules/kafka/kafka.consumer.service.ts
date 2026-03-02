@@ -16,6 +16,9 @@ export class KafkaConsumerService {
   }
 
   async onModuleInit() {
+    // Wait a bit for Kafka to be ready
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     await this.consumer.subscribe({
       topics: [
         KAFKA_TOPICS.PRODUCT_CREATED,
