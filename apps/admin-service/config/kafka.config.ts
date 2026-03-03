@@ -9,6 +9,5 @@ export const KAFKA_TOPICS = {
     INVENTORY_UPDATED: 'inventory.updated',
 
     //order service
-    ORDER_CREATED: 'order.created',
-    ORDER_STATUS_UPDATED: 'order.status.updated',
+    ORDER_CREATED: 'order',
 };

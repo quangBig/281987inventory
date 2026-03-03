@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { Kafka } from 'kafkajs';
 import { KafkaService } from './kafka.service';
+import { OrderSyncModule } from '../order/order-sync.module';
 
 @Module({
-  imports: [],
+  imports: [OrderSyncModule],
   providers: [
     {
       provide: Kafka,

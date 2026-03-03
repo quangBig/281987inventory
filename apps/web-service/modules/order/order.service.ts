@@ -63,8 +63,11 @@ export class OrderService {
             KAFKA_TOPICS.ORDER_CREATED,
             'order.created',
             savedOrder.orderNumber,
-            orderSyncData
-        )
+            {
+                event: 'order.created',
+                data: orderSyncData
+            }
+        );
         return this.mapToResponseDto(savedOrder);
     }
     // cancel order

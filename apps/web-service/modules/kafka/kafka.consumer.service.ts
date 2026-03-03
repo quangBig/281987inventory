@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Consumer, Kafka } from 'kafkajs';
 import { KAFKA_TOPICS } from '../../config/kafka.config';
 import { ProductSyncService } from '../product/product-syn.service';
+import { OrderSyncService } from '../order/order-sync.service';
 
 @Injectable()
 export class KafkaConsumerService {
@@ -11,6 +12,7 @@ export class KafkaConsumerService {
   constructor(
     private readonly kafka: Kafka,
     private readonly productSyncService: ProductSyncService,
+    private readonly orderSyncService: OrderSyncService,
   ) {
     this.consumer = this.kafka.consumer({ groupId: 'web-service-group' });
   }
@@ -25,6 +27,7 @@ export class KafkaConsumerService {
         KAFKA_TOPICS.PRODUCT_UPDATED,
         KAFKA_TOPICS.PRODUCT_DELETED,
         KAFKA_TOPICS.INVENTORY_UPDATED,
+        KAFKA_TOPICS.ORDER_CREATED, // Topic để nhận status update từ admin-service
       ],
     });
 
@@ -37,8 +40,9 @@ export class KafkaConsumerService {
           }
 
           const messageData = JSON.parse(message.value.toString());
-          this.logger.log(`Received message from topic ${topic}:`, messageData);
 
+          // Admin-service gửi structure: { event, data, eventId, timestamp }
+          const event = messageData.event;
           const data = messageData.data;
 
           if (!data) {
@@ -62,6 +66,15 @@ export class KafkaConsumerService {
             case KAFKA_TOPICS.INVENTORY_UPDATED:
               await this.productSyncService.updateInventory(data);
               this.logger.log(`Inventory updated: ${data.productSku}, new stock: ${data.stockQuantity}`);
+              break;
+            case KAFKA_TOPICS.ORDER_CREATED:
+              // Admin-service gửi structure: { event, data, eventId, timestamp }
+              if (event === 'order-status.update' || event === 'order-status.updated') {
+                await this.orderSyncService.updateOrderStatus(data);
+                this.logger.log(`Order status synced: ${data.orderNumber} → ${data.status}`);
+              } else {
+                this.logger.warn(`Loại event không xác định: ${event}`);
+              }
               break;
           }
 

@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { AdminOrder, OrderStatus } from './schemas/order.schema';
+import { KafkaService } from '../kafka/kafka.service';
+import { KAFKA_TOPICS } from 'apps/admin-service/config/kafka.config';
+import { OrderResponseDto } from './dto/order-response.dto';
 
 export interface OrderSyncData {
     orderNumber: string;
@@ -26,47 +29,63 @@ export class OrderService {
     constructor(
         @InjectModel(AdminOrder.name)
         private readonly orderModel: Model<AdminOrder>,
+        @Inject(forwardRef(() => KafkaService))
+        private readonly kafkaService: KafkaService
     ) { }
 
     async createOrderFromWebService(orderData: OrderSyncData): Promise<AdminOrder> {
         try {
-            this.logger.log(`Creating order in admin service: ${orderData.orderNumber}`);
+            this.logger.log(`Tạo đơn hàng trong admin service: ${orderData.orderNumber}`);
 
-            // Check if order already exists
+            // Kiểm tra các trường bắt buộc
+            if (!orderData.orderNumber || !orderData.customerEmail || !orderData.customerName || !orderData.totalAmount) {
+                throw new Error(`Missing required fields: orderNumber: ${orderData.orderNumber}, customerEmail: ${orderData.customerEmail}, customerName: ${orderData.customerName}, totalAmount: ${orderData.totalAmount}`);
+            }
+
+            // Kiểm tra xem đơn hàng đã tồn tại chưa
             const existingOrder = await this.orderModel.findOne({
                 orderNumber: orderData.orderNumber
             });
 
             if (existingOrder) {
-                this.logger.warn(`Order ${orderData.orderNumber} already exists in admin service`);
+                this.logger.warn(`Đơn hàng ${orderData.orderNumber} đã tồn tại trong admin service`);
                 return existingOrder;
             }
 
-            // Create new order with admin service processing status
+            // Phân tích ngày tháng an toàn, fallback về ngày hiện tại nếu không hợp lệ
+            const parseDate = (dateString: string): Date => {
+                if (!dateString) return new Date();
+                const date = new Date(dateString);
+                return isNaN(date.getTime()) ? new Date() : date;
+            };
+
+            // Tạo đơn hàng mới với trạng thái xử lý của admin service
             const newOrder = new this.orderModel({
                 orderNumber: orderData.orderNumber,
                 customerEmail: orderData.customerEmail,
                 customerName: orderData.customerName,
-                items: orderData.items,
+                items: orderData.items || [],
                 totalAmount: orderData.totalAmount,
-                status: OrderStatus.PENDING, // Start with PENDING for admin processing
-                createdAt: new Date(orderData.createdAt),
-                updatedAt: new Date(orderData.updatedAt),
+                status: OrderStatus.PENDING, // Bắt đầu với trạng thái chờ xử lý
+                createdAt: parseDate(orderData.createdAt),
+                updatedAt: parseDate(orderData.updatedAt),
             });
 
             const savedOrder = await newOrder.save();
-            this.logger.log(`Successfully created order ${orderData.orderNumber} in admin service`);
+            this.logger.log(`Tạo thành công đơn hàng ${orderData.orderNumber} trong admin service`);
 
             return savedOrder;
         } catch (error) {
-            this.logger.error(`Failed to create order ${orderData.orderNumber}:`, error);
+            this.logger.error(`Thất bại khi tạo đơn hàng ${orderData?.orderNumber}:`, error);
             throw error;
         }
     }
 
-    async updateOrderStatus(orderNumber: string, status: OrderStatus): Promise<AdminOrder> {
+    async updateOrderStatus(orderNumber: string, status: OrderStatus): Promise<any> {
+        this.logger.log(`[DEBUG] updateOrderStatus được gọi với orderNumber: ${orderNumber}, status: ${status}`);
+
         try {
-            const order = await this.orderModel.findOneAndUpdate(
+            const orderUpdate = await this.orderModel.findOneAndUpdate(
                 { orderNumber },
                 {
                     status,
@@ -75,14 +94,39 @@ export class OrderService {
                 { new: true }
             );
 
-            if (!order) {
+            if (!orderUpdate) {
                 throw new Error(`Order ${orderNumber} not found`);
             }
 
-            this.logger.log(`Updated order ${orderNumber} status to ${status}`);
-            return order;
+            this.logger.log(`Đã cập nhật trạng thái đơn hàng ${orderNumber} thành ${status}`);
+
+            // Publish message đến web-service để đồng bộ trạng thái
+            await this.kafkaService.publish(KAFKA_TOPICS.ORDER_CREATED, orderNumber, 'order-status.updated', {
+                orderNumber,
+                status
+            });
+
+            this.logger.log(`Đã publish message cập nhật trạng thái đơn hàng ${orderNumber} đến topic ${KAFKA_TOPICS.ORDER_CREATED}`);
+
+            // Ánh xạ thủ công sang OrderResponseDto để tránh lỗi TypeScript
+            return {
+                _id: (orderUpdate._id?.toString() || '') as string,
+                orderNumber: orderUpdate.orderNumber,
+                customerEmail: orderUpdate.customerEmail,
+                customerName: orderUpdate.customerName,
+                items: orderUpdate.items.map(item => ({
+                    sku: item.sku,
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price
+                })),
+                totalAmount: orderUpdate.totalAmount,
+                status: orderUpdate.status,
+                createdAt: orderUpdate.createdAt,
+                updatedAt: orderUpdate.updatedAt
+            };
         } catch (error) {
-            this.logger.error(`Failed to update order status for ${orderNumber}:`, error);
+            this.logger.error(`Thất bại khi cập nhật trạng thái đơn hàng cho ${orderNumber}:`, error);
             throw error;
         }
     }
@@ -98,4 +142,5 @@ export class OrderService {
     async getOrdersByStatus(status: OrderStatus): Promise<AdminOrder[]> {
         return this.orderModel.find({ status }).sort({ createdAt: -1 });
     }
+
 }

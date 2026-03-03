@@ -34,23 +34,29 @@ export class KafkaConsumerService {
             eachMessage: async ({ topic, partition, message }) => {
                 try {
                     if (!message.value) {
-                        this.logger.warn(`Received null message from topic ${topic}`);
+                        this.logger.warn(`Nhận được message null từ topic ${topic}`);
                         return;
                     }
 
                     const messageData = JSON.parse(message.value.toString());
-                    this.logger.log(`Received message from topic ${topic}:`, messageData);
+                    this.logger.log(`Nhận được message từ topic ${topic}:`, messageData);
 
                     const data = messageData.data;
 
                     if (!data) {
-                        this.logger.error(`No data field in message from topic ${topic}`);
+                        this.logger.error(`Không có trường data trong message từ topic ${topic}`);
                         return;
                     }
 
                     switch (topic) {
                         case KAFKA_TOPICS.ORDER_CREATED:
-                            await this.handleOrderCreated(data);
+                            if (data.event === 'order.created') {
+                                await this.handleOrderCreated(data.data);
+                            } else if (data.event === 'order-status.updated' || data.event === 'order-status.update') {
+                                await this.handleOrderStatusUpdated(data.data);
+                            } else {
+                                this.logger.warn(`Loại event không xác định: ${data.event}`);
+                            }
                             break;
                         case KAFKA_TOPICS.INVENTORY_UPDATED:
                             await this.handleInventoryUpdated(data);
@@ -58,48 +64,66 @@ export class KafkaConsumerService {
                     }
 
                 } catch (error) {
-                    this.logger.error(`Error processing message from topic ${topic}:`, error);
+                    this.logger.error(`Lỗi xử lý message từ topic ${topic}:`, error);
                 }
             },
         });
     }
 
     private async handleOrderCreated(orderData: any) {
-        this.logger.log(`Creating order in admin service: ${orderData.orderNumber}`);
+        this.logger.log(`Tạo đơn hàng trong admin service: ${orderData.orderNumber}`);
+        this.logger.log(`Dữ liệu đơn hàng nhận được:`, JSON.stringify(orderData, null, 2));
 
         try {
             await this.orderService.createOrderFromWebService(orderData);
-            this.logger.log(`Successfully processed order creation: ${orderData.orderNumber}`);
+            this.logger.log(`Xử lý thành công việc tạo đơn hàng: ${orderData.orderNumber}`);
         } catch (error) {
-            this.logger.error(`Failed to create order ${orderData.orderNumber}:`, error);
+            this.logger.error(`Thất bại khi tạo đơn hàng ${orderData.orderNumber}:`, error);
+            this.logger.error(`Dữ liệu đơn hàng thất bại:`, JSON.stringify(orderData, null, 2));
+        }
+    }
+
+    private async handleOrderStatusUpdated(statusData: any) {
+        this.logger.log(`Cập nhật trạng thái đơn hàng trong admin service: ${statusData.orderNumber} thành ${statusData.status}`);
+        this.logger.log(`Dữ liệu cập nhật trạng thái nhận được:`, JSON.stringify(statusData, null, 2));
+        this.logger.log(`[DEBUG] Nguồn message: order-status.updated từ Kafka topic`);
+
+        try {
+            // Chuyển đổi status string sang OrderStatus enum
+            const status = statusData.status.toLowerCase();
+            await this.orderService.updateOrderStatus(statusData.orderNumber, status as any);
+            this.logger.log(`Cập nhật thành công trạng thái đơn hàng: ${statusData.orderNumber} thành ${statusData.status}`);
+        } catch (error) {
+            this.logger.error(`Thất bại khi cập nhật trạng thái đơn hàng ${statusData.orderNumber}:`, error);
+            this.logger.error(`Dữ liệu trạng thái thất bại:`, JSON.stringify(statusData, null, 2));
         }
     }
 
     private async handleInventoryUpdated(inventoryData: any) {
-        this.logger.log(`Updating inventory in admin service: ${inventoryData.productSku}`);
+        this.logger.log(`Cập nhật inventory trong admin service: ${inventoryData.productSku}`);
 
         try {
-            // Update inventory in admin service
+            // Cập nhật inventory trong admin service
             await this.inventoryService.updateInventory(
                 inventoryData.productSku,
                 inventoryData.stockQuantity,
                 inventoryData.productName
             );
 
-            // Also update product stock quantity
+            // Cũng cập nhật số lượng sản phẩm
             try {
                 await this.productService.updateStockQuantity(
                     inventoryData.productSku,
                     inventoryData.stockQuantity
                 );
-                this.logger.log(`Product stock updated: ${inventoryData.productSku}, new stock: ${inventoryData.stockQuantity}`);
+                this.logger.log(`Cập nhật số lượng sản phẩm: ${inventoryData.productSku}, số tồn mới: ${inventoryData.stockQuantity}`);
             } catch (productError) {
-                this.logger.warn(`Failed to update product stock for ${inventoryData.productSku}: ${productError.message}`);
+                this.logger.warn(`Thất bại khi cập nhật số lượng sản phẩm cho ${inventoryData.productSku}: ${productError.message}`);
             }
 
-            this.logger.log(`Inventory updated: ${inventoryData.productSku}, new stock: ${inventoryData.stockQuantity}`);
+            this.logger.log(`Đã cập nhật inventory: ${inventoryData.productSku}, số tồn mới: ${inventoryData.stockQuantity}`);
         } catch (error) {
-            this.logger.error(`Failed to update inventory ${inventoryData.productSku}:`, error);
+            this.logger.error(`Thất bại khi cập nhật inventory ${inventoryData.productSku}:`, error);
         }
     }
 

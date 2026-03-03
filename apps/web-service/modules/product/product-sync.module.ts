@@ -6,6 +6,7 @@ import { ProductSync, ProductSyncSchema } from './schemas/product-sync.schema';
 import { KafkaModule } from '../kafka/kafka.module';
 import { KafkaConsumerService } from '../kafka/kafka.consumer.service';
 import { Product, ProductSchema } from 'apps/admin-service/modules/product/schemas/product.schemas';
+import { OrderSyncModule } from '../order/order-sync.module';
 
 @Module({
     imports: [
@@ -14,6 +15,7 @@ import { Product, ProductSchema } from 'apps/admin-service/modules/product/schem
             { name: Product.name, schema: ProductSchema }
         ]),
         forwardRef(() => KafkaModule),
+        OrderSyncModule,
     ],
     controllers: [ProductSyncController],
     providers: [ProductSyncService, KafkaConsumerService],

@@ -20,10 +20,10 @@ export class InventoryService {
                 isActive: true,
             });
 
-            this.logger.log(`Created inventory for product ${productSku} with quantity ${quantity}`);
+            this.logger.log(`Đã tạo inventory cho sản phẩm ${productSku} với số lượng ${quantity}`);
             return inventory;
         } catch (error) {
-            this.logger.error(`Failed to create inventory for product ${productSku}: ${error.message}`);
+            this.logger.error(`Thất bại khi tạo inventory cho sản phẩm ${productSku}: ${error.message}`);
             throw error;
         }
     }
@@ -48,9 +48,9 @@ export class InventoryService {
         const result = await this.inventoryModel.deleteOne({ productSku });
 
         if (result.deletedCount === 0) {
-            this.logger.warn(`No inventory found to delete for product ${productSku}`);
+            this.logger.warn(`Không tìm thấy inventory để xóa cho sản phẩm ${productSku}`);
         } else {
-            this.logger.log(`Deleted inventory for product ${productSku}`);
+            this.logger.log(`Đã xóa inventory cho sản phẩm ${productSku}`);
         }
     }
 

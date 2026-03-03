@@ -45,6 +45,18 @@ export class CreateOrderDto {
     @IsNumber()
     @Min(0)
     totalAmount: number;
+
+    @IsString()
+    @IsOptional()
+    status?: string;
+
+    @IsString()
+    @IsOptional()
+    createdAt?: string;
+
+    @IsString()
+    @IsOptional()
+    updatedAt?: string;
 }
 
 
