@@ -68,8 +68,7 @@ export class KafkaConsumerService {
               this.logger.log(`Inventory updated: ${data.productSku}, new stock: ${data.stockQuantity}`);
               break;
             case KAFKA_TOPICS.ORDER_CREATED:
-              // Admin-service gửi structure: { event, data, eventId, timestamp }
-              if (event === 'order-status.update' || event === 'order-status.updated') {
+              if (event === 'order-status.updated') {
                 await this.orderSyncService.updateOrderStatus(data);
                 this.logger.log(`Order status synced: ${data.orderNumber} → ${data.status}`);
               } else {

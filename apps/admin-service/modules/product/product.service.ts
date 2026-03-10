@@ -83,7 +83,7 @@ export class ProductService {
         await this.kafkaService.publish(
             KAFKA_TOPICS.INVENTORY_UPDATED,
             productNew.sku,
-            'INVENTORY_UPDATED',
+            'INVENTORY_UPDATED_CREATE',
             {
                 sku: productNew.sku,
                 name: productNew.name,

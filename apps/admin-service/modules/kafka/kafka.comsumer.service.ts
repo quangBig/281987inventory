@@ -25,7 +25,7 @@ export class KafkaConsumerService {
 
         await this.consumer.subscribe({
             topics: [
-                KAFKA_TOPICS.ORDER_CREATED, // Revert back to order.created
+                KAFKA_TOPICS.ORDER_CREATED,
                 KAFKA_TOPICS.INVENTORY_UPDATED
             ],
         });
@@ -52,7 +52,7 @@ export class KafkaConsumerService {
                         case KAFKA_TOPICS.ORDER_CREATED:
                             if (data.event === 'order.created') {
                                 await this.handleOrderCreated(data.data);
-                            } else if (data.event === 'order-status.updated' || data.event === 'order-status.update') {
+                            } else if (data.event === 'order-status.updated') {
                                 await this.handleOrderStatusUpdated(data.data);
                             } else {
                                 this.logger.warn(`Loại event không xác định: ${data.event}`);
